@@ -61,7 +61,6 @@ version = '1.7'
 import numpy as np
 import glob
 import astropy
-import photutils
 import sys
 import shutil
 import os
@@ -85,8 +84,12 @@ from astropy.nddata import Cutout2D
 import astroalign as aa
 from reproject import reproject_interp
 from PyZOGY.subtract import run_subtraction
+from photutils.aperture import CircularAnnulus, CircularAperture, aperture_photometry
+from photutils.background import Background2D, LocalBackground, MMMBackground
+from photutils.centroids import centroid_2dg, centroid_sources
+from photutils.psf import (CircularGaussianPRF, EPSFBuilder, PSFPhotometry,
+                           SourceGrouper, extract_stars)
 from photutils.utils import calc_total_error
-from photutils.psf import IntegratedGaussianPRF
 from ccdproc import cosmicray_lacosmic as lacosmic
 import warnings
 import signal
@@ -94,7 +97,6 @@ import wget
 from astroquery.astrometry_net import AstrometryNet
 from astropy.stats import sigma_clipped_stats
 from photutils.detection import find_peaks
-from photutils.background import LocalBackground, MMMBackground
 
 
 def handler(signum, frame):
@@ -1096,7 +1098,7 @@ for f in usedfilters:
 
             print('\n\nSubtracting background...')
 
-            bkg = photutils.background.Background2D(data,box_size=bkgbox)
+            bkg = Background2D(data,box_size=bkgbox)
             
             bkg_error = bkg.background_rms
 
@@ -1175,8 +1177,8 @@ for f in usedfilters:
                 co[:,1] += y_sh
 
             # And centroid
-            co[:,0],co[:,1] = photutils.centroids.centroid_sources(data,co[:,0],co[:,1],
-                                        centroid_func=photutils.centroids.centroid_2dg)
+            co[:,0],co[:,1] = centroid_sources(data,co[:,0],co[:,1],
+                                        centroid_func=centroid_2dg)
 
             del_x = np.nanmedian(co[:,0]-orig_co[:,0])
             del_y = np.nanmedian(co[:,1]-orig_co[:,1])
@@ -1205,9 +1207,9 @@ for f in usedfilters:
 
             print('\nDoing aperture photometry...')
 
-            photaps = photutils.CircularAperture(co, r=aprad)
+            photaps = CircularAperture(co, r=aprad)
 
-            photTab = photutils.aperture_photometry(data, photaps, error=err_array)
+            photTab = aperture_photometry(data, photaps, error=err_array)
 
             print('Done')
             
@@ -1268,17 +1270,17 @@ for f in usedfilters:
                         psfthresh += 5
                         
                     # extract stars from image
-                    psfstars = photutils.psf.extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
+                    psfstars = extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
                     while(len(psfstars))<5 and psfthresh>0:
                         print('Warning: too few PSF stars with threshold '+str(psfthresh)+' sigma, trying lower sigma')
                         psfthresh -= 1
-                        psfstars = photutils.psf.extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
+                        psfstars = extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
                     if len(psfstars)<5:
                         psfthresh = psfthresh0
                         print('Could not find 5 PSF stars, trying for 3...')
                         while(len(psfstars))<3 and psfthresh>0:
                             psfthresh -= 1
-                            psfstars = photutils.psf.extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
+                            psfstars = extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
                         if psfthresh < 3:
                             empirical = False
                             break
@@ -1313,7 +1315,7 @@ for f in usedfilters:
                     # build PSF
 
                     try:
-                        epsf_builder = photutils.EPSFBuilder(maxiters=10,recentering_maxiters=5,
+                        epsf_builder = EPSFBuilder(maxiters=10,recentering_maxiters=5,
                                         oversampling=samp,smoothing_kernel='quadratic',shape=2*stamprad-1)
                         epsf, fitted_stars = epsf_builder(psfstars)
 
@@ -1397,13 +1399,13 @@ for f in usedfilters:
                     fwhm_gauss = fwhm_gauss_0
                 fwhm_gauss = float(fwhm_gauss)
                 
-                epsf = IntegratedGaussianPRF(sigma=fwhm_gauss/2.355)
+                epsf = CircularGaussianPRF(fwhm=fwhm_gauss)
                 
                 psf = np.zeros((2*stamprad+1,2*stamprad+1))
                 
                 for xt in np.arange(2*stamprad+1):
                     for yt in np.arange(2*stamprad+1):
-                        psf[xt,yt] = epsf.evaluate(xt,yt,x_0=stamprad,y_0=stamprad,sigma=fwhm_gauss/2.355,flux=1)
+                        psf[xt,yt] = epsf.evaluate(xt,yt,x_0=stamprad,y_0=stamprad,fwhm=fwhm_gauss,flux=1)
             
 
                 ax2 = plt.subplot2grid((2,5),(0,3))
@@ -1451,9 +1453,9 @@ for f in usedfilters:
 
             aprad_opt = np.sqrt(len(psf[psf>np.max(psf)*pix_frac])/np.pi)
             
-            test_ap = photutils.CircularAperture([len(psf[0])/2,len(psf[0])/2], r=aprad_opt)
+            test_ap = CircularAperture([len(psf[0])/2,len(psf[0])/2], r=aprad_opt)
             
-            testTab = photutils.aperture_photometry(psf,test_ap)
+            testTab = aperture_photometry(psf,test_ap)
             
             apfrac_verify = testTab['aperture_sum'][0]/np.sum(psf) # fraction of flux contained in aprad_opt
 
@@ -1462,9 +1464,9 @@ for f in usedfilters:
 
             print('\n\nDoing aperture photometry for optimal aperture...')
 
-            photaps_opt = photutils.CircularAperture(co[goodStars], r=aprad_opt)
+            photaps_opt = CircularAperture(co[goodStars], r=aprad_opt)
 
-            photTab_opt = photutils.aperture_photometry(data, photaps_opt, error=err_array)
+            photTab_opt = aperture_photometry(data, photaps_opt, error=err_array)
 
 
 
@@ -1480,19 +1482,22 @@ for f in usedfilters:
             psfcoordTable['y_0'] = co[:,1][goodStars]
             psfcoordTable['flux_0'] = photTab['aperture_sum'][goodStars]
 
-            grouper = photutils.psf.DAOGroup(crit_separation=stamprad)
+            grouper = SourceGrouper(min_separation=stamprad)
 
             # need an odd number of pixels to fit PSF
             fitrad = 2*stamprad + 1
 
-            psfphot = photutils.psf.BasicPSFPhotometry(group_maker=grouper,
-                            bkg_estimator=photutils.background.MMMBackground(),
-                            psf_model=epsf, fitshape=fitrad,
-                            finder=None, aperture_radius=min(stamprad,2*aprad_opt))
+            psfphot = PSFPhotometry(psf_model=epsf, fit_shape=fitrad,
+                            grouper=grouper, finder=None,
+                            aperture_radius=min(stamprad,2*aprad_opt))
 
-            psfphotTab = psfphot.do_photometry(data, init_guesses=psfcoordTable)
+            # BasicPSFPhotometry applied its background estimator globally.
+            # Preserve that behavior because the image has already had a
+            # spatially varying Background2D model subtracted above.
+            psf_data = data - MMMBackground()(data)
+            psfphotTab = psfphot(psf_data, init_params=psfcoordTable)
 
-            psfsubIm = psfphot.get_residual_image()
+            psfsubIm = psfphot.make_residual_image(psf_data, psf_shape=fitrad)
 
             ax1.imshow(psfsubIm, origin='lower',cmap='gray',
                         vmin=visualization.ZScaleInterval().get_limits(data)[0],
@@ -1755,7 +1760,7 @@ for f in usedfilters:
                 except:
                     gain2 = 1.0
 
-                bkg2 = photutils.background.Background2D(data2,box_size=bkgbox)
+                bkg2 = Background2D(data2, box_size=bkgbox)
 
                 data2 = data2.astype(float) - bkg2.background
                 
@@ -1806,8 +1811,8 @@ for f in usedfilters:
                 co2 = co.copy()
 
                 try:
-                    co2[:,0],co2[:,1] = photutils.centroids.centroid_sources(data2,co2[:,0],co2[:,1],
-                                            centroid_func=photutils.centroids.centroid_2dg)
+                    co2[:,0],co2[:,1] = centroid_sources(data2,co2[:,0],co2[:,1],
+                                            centroid_func=centroid_2dg)
                 except:
                     pass
 
@@ -1820,9 +1825,9 @@ for f in usedfilters:
                 nddata2 = astropy.nddata.NDData(data=data2)
 
 
-                photaps2 = photutils.CircularAperture(co2, r=aprad)
+                photaps2 = CircularAperture(co2, r=aprad)
 
-                photTab2 = photutils.aperture_photometry(data2, photaps2, err_array2)
+                photTab2 = aperture_photometry(data2, photaps2, err_array2)
 
 
                 print('\nBuilding template image PSF for subtraction')
@@ -1857,17 +1862,17 @@ for f in usedfilters:
                             stamprad2 = max([stamprad,10])
                             psfthresh2 += 5
 
-                        psfstars2 = photutils.psf.extract_stars(nddata2, psfinput2[photTab2['aperture_sum']>psfthresh2*photTab2['aperture_sum_err']], size=2*stamprad2+5)
+                        psfstars2 = extract_stars(nddata2, psfinput2[photTab2['aperture_sum']>psfthresh2*photTab2['aperture_sum_err']], size=2*stamprad2+5)
                         while(len(psfstars2))<5 and psfthresh2>0:
                             print('Warning: too few PSF stars with threshold '+str(psfthresh2)+' sigma, trying lower sigma')
                             psfthresh2 -= 1
-                            psfstars2 = photutils.psf.extract_stars(nddata2, psfinput2[photTab2['aperture_sum']>psfthresh2*photTab2['aperture_sum_err']], size=2*stamprad2+5)
+                            psfstars2 = extract_stars(nddata2, psfinput2[photTab2['aperture_sum']>psfthresh2*photTab2['aperture_sum_err']], size=2*stamprad2+5)
                         if len(psfstars2)<5:
                             print('Could not find 5 PSF stars, trying for 3...')
                             psfthresh2 = psfthresh0
                             while(len(psfstars2))<3 and psfthresh2>0:
                                 psfthresh2 -= 1
-                                psfstars2 = photutils.psf.extract_stars(nddata2, psfinput2[photTab2['aperture_sum']>psfthresh2*photTab2['aperture_sum_err']], size=2*stamprad2+5)
+                                psfstars2 = extract_stars(nddata2, psfinput2[photTab2['aperture_sum']>psfthresh2*photTab2['aperture_sum_err']], size=2*stamprad2+5)
                             if psfthresh2 < 3:
                                 empirical = False
                                 break
@@ -1878,7 +1883,7 @@ for f in usedfilters:
                         
                         # build PSF
                         try:
-                            epsf_builder = photutils.EPSFBuilder(maxiters=10,recentering_maxiters=5,
+                            epsf_builder = EPSFBuilder(maxiters=10,recentering_maxiters=5,
                                             oversampling=samp2,smoothing_kernel='quadratic',shape=2*stamprad2-1)
                             epsf2, fitted_stars2 = epsf_builder(psfstars2)
 
@@ -1964,15 +1969,13 @@ for f in usedfilters:
                         fwhm_gauss2 = fwhm_gauss_0
                     fwhm_gauss2 = float(fwhm_gauss2)
                     
-                    epsf2 = IntegratedGaussianPRF(sigma=fwhm_gauss2/2.355)
+                    epsf2 = CircularGaussianPRF(fwhm=fwhm_gauss2)
                     
                     psf2 = np.zeros((2*stamprad2+1,2*stamprad2+1))
                     
                     for xt in np.arange(2*stamprad2+1):
                         for yt in np.arange(2*stamprad2+1):
-                            psf2[xt,yt] = epsf2.evaluate(xt,yt,x_0=stamprad2,y_0=stamprad2,sigma=fwhm_gauss2/2.355,flux=1)
-
-
+                            psf2[xt,yt] = epsf2.evaluate(xt,yt,x_0=stamprad2,y_0=stamprad2,fwhm=fwhm_gauss2,flux=1)
 
                 tmppsf = fits.PrimaryHDU(psf2)
                 tmppsf.writeto('tmpl_psf.fits',overwrite=True)
@@ -2110,11 +2113,10 @@ for f in usedfilters:
                     data_sub = im_sub
                     
                     try:
-                        bkg_new = photutils.background.Background2D(data_sub,box_size=bkgbox)
+                        bkg_new = Background2D(data_sub,box_size=bkgbox)
                     except:
-                        bkg_new = photutils.background.Background2D(data_sub,box_size=int(cutoutsize_x_new/4),exclude_percentile=0)
+                        bkg_new = Background2D(data_sub,box_size=int(cutoutsize_x_new/4),exclude_percentile=0)
 
-                    
                     bkg_new_error = bkg_new.background_rms
                     
                     data_sub -= bkg_new.background
@@ -2226,8 +2228,8 @@ for f in usedfilters:
             SNco_orig = SNco.copy()
 
             SNco_new = [0,0]
-            SNco_new[0],SNco_new[1] = photutils.centroids.centroid_sources(data,SNco[0],SNco[1],
-                                         centroid_func=photutils.centroids.centroid_2dg)
+            SNco_new[0],SNco_new[1] = centroid_sources(data,SNco[0],SNco[1],
+                                         centroid_func=centroid_2dg)
             SNco = [SNco_new[0][0],SNco_new[1][0]]
 
             plt.figure(1)
@@ -2337,9 +2339,9 @@ for f in usedfilters:
 
 
             # apertures
-    #        photap = photutils.CircularAperture(SNco, r=aprad_opt)
-            photap = [photutils.CircularAperture(SNco, r=r) for r in [aprad_opt,aprad]]
-            skyap = photutils.CircularAnnulus(SNco, r_in=aprad, r_out=aprad+skyrad)
+    #        photap = CircularAperture(SNco, r=aprad_opt)
+            photap = [CircularAperture(SNco, r=r) for r in [aprad_opt,aprad]]
+            skyap = CircularAnnulus(SNco, r_in=aprad, r_out=aprad+skyrad)
             skymask = skyap.to_mask(method='center')
 
             # Get median sky in annulus around transient
@@ -2355,7 +2357,7 @@ for f in usedfilters:
                 bkg_error_adu = bkg_error.copy()
                 bkg_error = np.array([i.astype(float) for i in bkg_error_adu])
                 err_array = calc_total_error(data, bkg_error, gain)
-            SNphotTab = photutils.aperture_photometry(data, photap, err_array)
+            SNphotTab = aperture_photometry(data, photap, err_array)
             SNphotTab['local_sky'] = bkg_local
             SNphotTab['aperture_sum_sub'] = SNphotTab['aperture_sum_1'] - bkg_local * photap[1].area
             SNphotTab['aperture_opt_sum_sub'] = SNphotTab['aperture_sum_0'] - bkg_local * photap[0].area
@@ -2372,13 +2374,13 @@ for f in usedfilters:
     #        epsf.y_0.fixed = True
     
             localbkg_estimator = LocalBackground(aprad, aprad+skyrad, MMMBackground())
-            psfphot = photutils.psf.PSFPhotometry(psf_model=epsf, fit_shape=fitrad,
+            psfphot = PSFPhotometry(psf_model=epsf, fit_shape=fitrad,
                             finder=None, aperture_radius=min(stamprad,2*aprad_opt),
                             localbkg_estimator=localbkg_estimator)
 
             SNpsfphotTab = psfphot(data, error=err_array, init_params=SNcoordTable)
 
-            SNpsfsubIm = psfphot.make_residual_image(data, (2*(aprad+skyrad),2*(aprad+skyrad)))
+            SNpsfsubIm = psfphot.make_residual_image(data, psf_shape=(2*(aprad+skyrad), 2*(aprad+skyrad)))
 
             print('PSF done')
 
