@@ -50,8 +50,7 @@ version = '1.7'
         - ZP is measured from sequence stars
         - Any template subtracted
         - comment allows user to specify if e.g. PSF fit looked unreliable
-        
-        
+
     For image subtraction, template name must be template_<standard filter name>.fits !!!
 
     NEED TO FULLY DOCUMENT...
@@ -114,7 +113,6 @@ signal.signal(signal.SIGINT, handler)
 warnings.filterwarnings("ignore")
 
 
-
 # Optional flags:
 
 parser = argparse.ArgumentParser()
@@ -152,7 +150,7 @@ parser.add_argument('--apfrac', dest='apfrac', default=0.9, type=float,
 
 parser.add_argument('--stamprad', dest='stamprad', default=15, type=int,
                     help='Radius for PSF extraction')
-                    
+
 parser.add_argument('--skyrad', dest='skyrad', default=5, type=int,
                     help='Width of annulus for sky background')
 
@@ -302,8 +300,6 @@ ims.sort()
 
 ##################################################
 
-
-
 ##### FUNCTIONS TO QUERY PANSTARRS #######
 
 PS1_CATALOG = 'II/389/ps1_dr2'
@@ -406,7 +402,7 @@ def PS1cutouts(ra,dec,filt,size=1):
         print('Image found: ' + image_name + '\n')
 
         cutout_url = 'http://ps1images.stsci.edu/cgi-bin/fitscut.cgi?&filetypes=stack'
-        
+
         cutout_url += '&size='+str(size_pix)
         cutout_url += '&ra='+str(ra)
         cutout_url += '&dec='+str(dec)
@@ -415,7 +411,7 @@ def PS1cutouts(ra,dec,filt,size=1):
         cutout_url += '&red='+image_name
 
         dest_file = 'template_'+filt+'.fits'
-        
+
         try:
             wget.download(cutout_url, out=dest_file)
         except:
@@ -428,7 +424,7 @@ def PS1cutouts(ra,dec,filt,size=1):
         print('\nPS1 template search failed!\n')
 
         dest_file = ''
-        
+
     return dest_file
 
 
@@ -442,28 +438,28 @@ def SDSScutouts(ra,dec,filt):
     print('\nSearching for SDSS images of field...\n')
 
     pos = coords.SkyCoord(str(ra)+' '+str(dec), unit='deg', frame='icrs')
-    
+
     try:
         xid = SDSS.query_region(pos,data_release=16)
         if len(xid)>1:
             xid.remove_rows(slice(1,len(xid)))
-            
+
         im = SDSS.get_images(matches=xid, band=filt)
-        
+
         dest_file = 'template_'+filt+'.fits'
-        
+
         im[0].writeto(dest_file)
-        
+
         print('Template downloaded as ' + dest_file + '\n')
 
     except:
         print('SDSS template search failed!\n')
-        
+
         dest_file = ''
-        
+
     return dest_file
-        
-        
+
+
 def SDSScatalog(ra,dec,magmin=25,magmax=8,queryrad=5):
 
     print('\nQuerying SDSS for reference stars via VizieR...\n')
@@ -558,7 +554,6 @@ filtSyn = {'u':['u','SDSS-U','up','up1','U640','F336W','Sloan_u','u_Sloan'],
 filtAll = 'u,g,r,i,z,y,U,B,V,R,I,J,H,K'
 
 
-
 print('#################################################\n#                                               #\n#  Welcome to PSF: Photometry Sans Frustration  #\n#                    (V'+version+')                     #\n#      Written by Matt Nicholl (2015-2022)      #\n#                                               #\n#################################################')
 
 
@@ -575,13 +570,11 @@ outFile = open(results_filename,'w')
 outFile.write('#image\ttarget\tfilter\tmjd\tPSFmag\terr\tAp_opt\terr\tAp_big\terr\tap_limit\tZP\terr\tflux_opt\terr\tflux_big\terr\topt_rad\ttemplate\tcomments')
 
 
-
 # Prepare to plot images and PSFs
 
 plt.figure(1,(14,7))
 plt.ion()
 plt.show()
-
 
 
 ################################
@@ -592,7 +585,7 @@ plt.show()
 
 if coords1[0] and coords1[1]:
     RAdec = np.array(coords1)
-    
+
 else:
     suggSn = glob.glob('*coords.txt')
     if len(suggSn)==0:
@@ -611,14 +604,11 @@ else:
     RAdec = np.genfromtxt(snFile)
 
 
-
-
 #### BEGIN LOOP OVER IMAGES ####
 
 # In case wcs offset is needed
 x_sh_1 = 0
 y_sh_1 = 0
-
 
 
 ################################
@@ -658,7 +648,7 @@ for image in ims:
 
     if filtername not in filtAll:
         filtername = input('Please enter filter ('+filtAll+') ')
-        
+
     if filtername in bands or len(bands) == 0:
 
         try:
@@ -715,13 +705,12 @@ for image in ims:
 
         if not filtername in usedfilters:
             usedfilters.append(filtername)
-            
+
     else:
         print('Band outside user-specified list, skipping!')
         continue
 
 filtertab = np.array(filtertab)
-
 
 
 #################################
@@ -732,29 +721,29 @@ filtertab = np.array(filtertab)
 for f in usedfilters:
 
     print('\n\n#########\n'+f+'-band\n#########')
-    
+
     filtertab2 = []
 
     ims1 = filtertab[filtertab[:,1]==f]
-    
+
     templates1 = filtertab[:,-1][filtertab[:,1]==f]
-        
+
     has_template = False
-        
+
     if sub==True:
         if len(np.unique(templates1)) > 1:
             print('Warning: different templates for same filter!')
             print('Using '+templates1[0])
-        
+
         template = templates1[0]
-        
+
         if len(template) > 0:
             has_template = True
 
     ######## Search for sequence star file (RA, dec, mags)
 
     seqFile = ''
-    
+
     hasPS1 = False
     trySDSS = False
 
@@ -764,7 +753,7 @@ for f in usedfilters:
         suggSeq = glob.glob('../*seq.txt')
     if len(suggSeq)==0:
         suggSeq = glob.glob('../../*seq.txt')
-        
+
     # Note PS1 sequence to avoid always downloading
     if 'PS1_seq.txt' in suggSeq:
         hasPS1 = True
@@ -780,7 +769,7 @@ for f in usedfilters:
             if f not in seqHead:
                 suggSeq.pop(i-n)
                 n += 1
-                
+
     # if PS1 has required filter, give it priority
     if 'PS1_seq.txt' in suggSeq:
         seqFile = 'PS1_seq.txt'
@@ -837,11 +826,11 @@ for f in usedfilters:
     clean_list = []
 
     zero_shift_image = ''
-    
+
     dostack = False
-    
+
     use_existing = 'y'
-    
+
     ims2 = ims1[:,0].copy()
 
     if stack==True:
@@ -895,20 +884,20 @@ for f in usedfilters:
                             filtertab2.append([stackname, filtername, mjdstack, ''])
                     if go_on == True:
                         continue
-                            
+
                 stacktab2 = []
                 for row in stacktab:
                     if row[0] not in existing_stacks:
                         stacktab2.append(row)
-                        
+
                 stacktab = np.array(stacktab2)
 
                 if len(stacktab) > 1:
                     try:
                         zero_shift_image = stacktab[:,0][0]
-                        
+
                         zero_shift_header = fits.getheader(zero_shift_image)
-                        
+
                         if clean == True:
                             clean_zero, mask = lacosmic(fits.getdata(zero_shift_image))
 
@@ -926,7 +915,7 @@ for f in usedfilters:
                             except:
                                 registered, footprint = reproject_interp(fits.open(im1)[0], zero_shift_header)
                                 registered[np.isnan(registered)] = np.nanmedian(registered)
-                                
+
                                 clean_list.append(stackname)
 
 
@@ -934,20 +923,20 @@ for f in usedfilters:
 
                         shifted_data_cube = np.stack([shifted_data[im1] for im1 in stacktab[:,0]])
                         stacked_data = np.nanmedian(shifted_data_cube, axis=0)
-                        
+
                         stackheader = fits.getheader(zero_shift_image)
-                        
+
                         stackheader['MJD'] = mjdstack
                         stackheader['MJD-OBS'] = mjdstack
 
                         fits.writeto('stack_'+str(np.round(mjdstack,4))+'_'+f+'.fits',
                                 stacked_data,header=stackheader,
                                 overwrite=True)
-                        
+
                         ims2.append(stackname)
-                        
+
                         print('Stack done: ' + str(np.round(mjdstack,4)))
-                        
+
                         if sub == True and has_template == True:
                             filtertab2.append([stackname, filtername, mjdstack, template])
                         else:
@@ -976,7 +965,7 @@ for f in usedfilters:
                     pass
 
     filtertab2 = np.array(filtertab2)
-    
+
 #################################
 # Part four: do some photometry
 #################################
@@ -984,16 +973,16 @@ for f in usedfilters:
     counter = 1
 
     for image in ims2:
-    
+
         try:
-            
+
             stamprad = stamprad0
 
             plt.clf()
 
             print('\n##########################################')
             print('\n> Image: '+image+'  (number %d of %d in filter)' %(counter,len(ims2)))
-            
+
             counter += 1
 
 #            if dostack == True:
@@ -1018,7 +1007,7 @@ for f in usedfilters:
                     target_name = fits.getval(image,'UNKNOWN')
                 except:
                     target_name = 'UNKNOWN'
-                    
+
 
     ### NEED TO MAKE COMPATIBLE WITH NAMES OF IMAGE IN SUBTRACTION PART
 
@@ -1036,7 +1025,7 @@ for f in usedfilters:
 
                 data = im[1].data
                 header = im[1].header
-                
+
             try:
                 gain = header['GAIN']
             except:
@@ -1046,8 +1035,8 @@ for f in usedfilters:
                 print('\nCleaning cosmics...')
                 data, cosmicmask = lacosmic(data)
                 print('Done')
-                
-                
+
+
             if astrometry == True:
                 print('\nAttempting astrometry solve (specify pixel scale with --pix-scale if slow)...')
                 try:
@@ -1059,7 +1048,7 @@ for f in usedfilters:
                     sources.reverse()
 
                     ast = AstrometryNet()
-                    
+
                     if pix_scale:
                         wcs_header = ast.solve_from_source_list(sources['x_peak'][:100], sources['y_peak'][:100], solve_timeout=600, center_ra=RAdec[0], center_dec=RAdec[1], radius=0.2, parity=2, image_width=header['NAXIS1'], image_height=header['NAXIS2'], scale_units='arcsecperpix', scale_est=pix_scale, scale_err = 0.1)
                     else:
@@ -1070,7 +1059,7 @@ for f in usedfilters:
 #                        if i[0] in ['CRVAL1','CRVAL2','CRPIX1','CRPIX2','CUNIT1','CUNIT2','CD1_1','CD1_2','CD2_1','CD2_2']:
                         if i[0] != 'NAXIS':
                             header.set(i[0],i[1],i[2])
-                        
+
                     print('\n')
 
                 except:
@@ -1080,15 +1069,15 @@ for f in usedfilters:
                     print('See: https://astroquery.readthedocs.io/en/latest/astrometry_net/astrometry_net.html')
 
             # Set up sequence stars, initial steps
-            
+
             if f in seqMags:
                 mag_range = (seqMags[f]>magmax)&(seqMags[f]<magmin)
             else:
                 mag_range = np.ones(len(seqDat)).astype(bool)
-            
+
             co = astropy.wcs.WCS(header=header).all_world2pix(seqDat[:,0],seqDat[:,1],1)
             co = np.array(list(zip(co[0],co[1])))
-            
+
             co = co[mag_range]
 
             # Remove any stars falling outside the image or too close to edge
@@ -1118,11 +1107,11 @@ for f in usedfilters:
             print('\n\nSubtracting background...')
 
             bkg = Background2D(data,box_size=bkgbox)
-            
+
             bkg_error = bkg.background_rms
 
             data = data.astype(float) - bkg.background
-            
+
             try:
                 err_array = calc_total_error(data, bkg_error, gain)
             except:
@@ -1133,13 +1122,13 @@ for f in usedfilters:
                 err_array = calc_total_error(data, bkg_error, gain)
 
             axBKG = plt.subplot2grid((2,5),(0,2))
-            
+
             axBKG.imshow(bkg.background, origin='lower',cmap='viridis')
-            
+
             axBKG.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
 
             axBKG.set_title('Background')
-        
+
             print('Done')
 
         ########## plot data
@@ -1203,7 +1192,7 @@ for f in usedfilters:
             del_y = np.nanmedian(co[:,1]-orig_co[:,1])
             sig_x = np.nanstd(co[:,0]-orig_co[:,0])
             sig_y = np.nanstd(co[:,1]-orig_co[:,1])
-            
+
             if not forcepos:
                 SNco[0] += del_x
                 SNco[1] += del_y
@@ -1220,8 +1209,6 @@ for f in usedfilters:
 
                 ax1.text(co[j,0]+20,co[j,1]-20,str(j+1),color='k',fontsize=14)
 
-
-
             # Define apertures and do simple photometry on sequence stars
 
             print('\nDoing aperture photometry...')
@@ -1231,12 +1218,12 @@ for f in usedfilters:
             photTab = aperture_photometry(data, photaps, error=err_array)
 
             print('Done')
-            
-            
+
+
             goodStars = (photTab['aperture_sum']>10*photTab['aperture_sum_err'])
-            
+
             seq_SNR = 10
-            
+
             if len(goodStars[goodStars]) < 10:
                 goodStars = (photTab['aperture_sum']>5*photTab['aperture_sum_err'])
                 seq_SNR = 5
@@ -1264,30 +1251,30 @@ for f in usedfilters:
             # Create model from sequence stars
             happy = 'n'
             while happy not in ('y','yes'):
-            
+
                 # psf quality tests
                 sumpsf = -1
                 minpsf = -1
                 x_peak = 0
                 y_peak = 0
-                
+
                 psf_iter = 0
-                
+
                 while ((sumpsf < 0) or (minpsf < -0.01) or ((x_peak/len(psf) < 0.4) or (x_peak/len(psf) > 0.6)) or ((y_peak/len(psf) < 0.4) or (y_peak/len(psf) > 0.6))) and psf_iter < 5:
-                
+
                     if psf_iter > 5:
                         break # WHY ISN'T WHILE LOOP DOING THIS?!
-                
+
                     psf_iter += 1
 
                     print('Attempt: %d' %psf_iter)
-                
+
                     if psf_iter > 1:
                         print('PSF failed quality checked, randomly varying parameters and trying again')
                         stamprad += np.random.randint(11)-5
                         stamprad = max([stamprad,10])
                         psfthresh += 5
-                        
+
                     # extract stars from image
                     psfstars = extract_stars(nddata, psfinput[photTab['aperture_sum']>psfthresh*photTab['aperture_sum_err']], size=2*stamprad+5)
                     while(len(psfstars))<5 and psfthresh>0:
@@ -1305,7 +1292,7 @@ for f in usedfilters:
                             break
 
                     ax1.clear()
-                    
+
                     ax1.imshow(data, origin='lower',cmap='gray',
                                 vmin=visualization.ZScaleInterval().get_limits(data)[0],
                                 vmax=visualization.ZScaleInterval().get_limits(data)[1])
@@ -1317,7 +1304,7 @@ for f in usedfilters:
 
                     ax1.get_yaxis().set_visible(False)
                     ax1.get_xaxis().set_visible(False)
-                    
+
                     ax1.errorbar(SNco[0],SNco[1],fmt='o',markeredgecolor='r',mfc='none',
                                     markeredgewidth=3,markersize=20)
 
@@ -1339,14 +1326,14 @@ for f in usedfilters:
                         epsf, fitted_stars = epsf_builder(psfstars)
 
                         psf = epsf.data
-                        
+
                         x_peak = np.where(psf==psf.max())[1][0]
                         y_peak = np.where(psf==psf.max())[0][0]
-                        
+
                         minpsf = np.min(psf)
                         sumpsf = np.sum(psf)
-                        
-      
+
+
                         ax2 = plt.subplot2grid((2,5),(0,3))
 
                         ax2.imshow(psf, origin='lower',cmap='gray',
@@ -1376,10 +1363,10 @@ for f in usedfilters:
                         plt.draw()
 
                         plt.tight_layout(pad=0.5)
-                        
+
                         empirical = True
 
-                                
+
                     except:
                         print('PSF fit failed (usually a weird EPSF_builder error):\nTrying different stamp size usually fixes!')
                         empirical = False
@@ -1400,32 +1387,32 @@ for f in usedfilters:
                         psfthresh1 = input('Try new inclusion threshold: [' +str(psfthresh)+' sigma] ')
                         if not psfthresh1: psfthresh1 = psfthresh
                         psfthresh = int(psfthresh1)
-                        
+
                         samp1 = input('Try new PSF oversampling: [' +str(samp)+'] ')
                         if not samp1: samp1 = samp
                         samp = int(samp1)
                 else:
                     happy = 'y'
-                    
-                    
+
+
             if empirical == False:
                 print('\nNo PSF determined, using basic Gaussian model')
-                
+
                 if not quiet:
                     fwhm_gauss = input('Please specify width (FWHM) in pixels ['+str(fwhm_gauss_0)+'] ')
                     if not fwhm_gauss: fwhm_gauss = fwhm_gauss_0
                 else:
                     fwhm_gauss = fwhm_gauss_0
                 fwhm_gauss = float(fwhm_gauss)
-                
+
                 epsf = CircularGaussianPRF(fwhm=fwhm_gauss)
-                
+
                 psf = np.zeros((2*stamprad+1,2*stamprad+1))
-                
+
                 for xt in np.arange(2*stamprad+1):
                     for yt in np.arange(2*stamprad+1):
                         psf[xt,yt] = epsf.evaluate(xt,yt,x_0=stamprad,y_0=stamprad,fwhm=fwhm_gauss,flux=1)
-            
+
 
                 ax2 = plt.subplot2grid((2,5),(0,3))
 
@@ -1457,25 +1444,25 @@ for f in usedfilters:
 
                 plt.tight_layout(pad=0.5)
 
-                        
-                    
+
+
             scipsf = fits.PrimaryHDU(psf)
             scipsf.writeto('sci_psf.fits',overwrite=True)
 
 
             # determine aperture size and correction
-            
+
     #            pix_frac = 0.5 # Optimal radius for S/N is R ~ FWHM. But leads to large aperture correction
     #            pix_frac = 0.1 # Aperture containing 90% of flux. Typically gives a radius ~ 2*FWHM
 
             pix_frac = np.max([1-apfrac,0.05])
 
             aprad_opt = np.sqrt(len(psf[psf>np.max(psf)*pix_frac])/np.pi)
-            
+
             test_ap = CircularAperture([len(psf[0])/2,len(psf[0])/2], r=aprad_opt)
-            
+
             testTab = aperture_photometry(psf,test_ap)
-            
+
             apfrac_verify = testTab['aperture_sum'][0]/np.sum(psf) # fraction of flux contained in aprad_opt
 
             ap_corr = 2.5*np.log10(apfrac_verify)
@@ -1487,11 +1474,7 @@ for f in usedfilters:
 
             photTab_opt = aperture_photometry(data, photaps_opt, error=err_array)
 
-
-
             print('Done')
-
-
 
             print('\nStarting PSF photometry...')
 
@@ -1522,8 +1505,6 @@ for f in usedfilters:
                         vmin=visualization.ZScaleInterval().get_limits(data)[0],
                         vmax=visualization.ZScaleInterval().get_limits(data)[1])
 
-
-
             print('Done')
 
         ########## Zero point from seq stars
@@ -1531,11 +1512,11 @@ for f in usedfilters:
             print('\nComputing image zeropoint...')
 
             if f in seqMags:
-            
+
                 magmax2 = magmax
                 magmin2 = magmin
-                
-                
+
+
                 happy = 'n'
                 while happy not in ('y','yes'):
 
@@ -1545,11 +1526,11 @@ for f in usedfilters:
                         magmax2 = magmax
 
                     mag_range_2 = (seqMags[f][mag_range][inframe][goodpix][found][goodStars]>=magmax2) & (seqMags[f][mag_range][inframe][goodpix][found][goodStars]<=magmin2)
-                
-                    
+
+
                     # PSF zeropoint
                     flux = np.array(psfphotTab['flux_fit'])
-                    
+
                     seqIm = -2.5*np.log10(flux)
 
                     zpList1 = seqMags[f][mag_range][inframe][goodpix][found][goodStars][mag_range_2] - seqIm[mag_range_2]
@@ -1590,15 +1571,15 @@ for f in usedfilters:
 
                     axZP.set_xlabel('Magnitude')
                     axZP.set_title('Zero point')
-                    
+
                     axZP.set_ylim(max(max(zpList)+0.5,ZP_psf+1),min(min(zpList)-0.5,ZP_psf-1))
                     axZP.set_xlim(min(seqMags[f][mag_range][inframe][goodpix][found][goodStars][mag_range_2][checkMags])-0.2, max(seqMags[f][mag_range][inframe][goodpix][found][goodStars][mag_range_2][checkMags])+0.2)
-                    
+
                     plt.draw()
-     
+
                     # optimal aperture ZP
                     flux = np.array(photTab_opt['aperture_sum'])
-                    
+
                     seqIm = -2.5*np.log10(flux)
 
                     zpList1 = seqMags[f][mag_range][inframe][goodpix][found][goodStars][mag_range_2] - seqIm[mag_range_2]
@@ -1628,7 +1609,7 @@ for f in usedfilters:
 
                     # big aperture ZP
                     flux = np.array(photTab['aperture_sum'])[goodStars]
-                    
+
                     seqIm = -2.5*np.log10(flux)
 
                     zpList1 = seqMags[f][mag_range][inframe][goodpix][found][goodStars][mag_range_2] - seqIm[mag_range_2]
@@ -1652,7 +1633,7 @@ for f in usedfilters:
                     print('Big aperture Zeropoint = %.3f +/- %.3f' %(ZP_ap,errZP_ap))
                     print('Optimal aperture Zeropoint = %.3f +/- %.3f' %(ZP_opt,errZP_opt))
 
-                    
+
                     if not quiet:
                         happy = input('\nProceed with this zeropoint? [y] ')
                         if not happy: happy = 'y'
@@ -1660,13 +1641,13 @@ for f in usedfilters:
                             magmax1 = input('Use new maximum mag: [' +str(magmax2)+'] ')
                             if not magmax1: magmax1 = magmax2
                             magmax2 = float(magmax1)
-                                                    
+
                             magmin1 = input('Use new minimum mag: [' +str(magmin2)+'] ')
                             if not magmin1: magmin1 = magmin2
                             magmin2 = float(magmin1)
                     else:
                         happy = 'y'
-                        
+
                 if errZP_psf > 5*errZP_opt or errZP_psf < 0.00001:
                     if not quiet:
                         badZP = input('\nPSF ZP may be unreliable (anomalous error).\nUse Big Aperture ZP instead? [y]' )
@@ -1676,7 +1657,7 @@ for f in usedfilters:
                     if badZP in ('y','yes'):
                         ZP_psf = ZP_ap
                         errZP_psf = errZP_ap
-                        
+
                     # NOTE: If PSF ZP looks really bad but aperture ZP is fine, it usually means the BasicPSFphotometry
                     # task has catastrophically failed in centroiding and jumped hundreds of pixels away from stars
                     # - seems to only happen if large numbers of sequence stars, can control with --magmin
@@ -1691,19 +1672,19 @@ for f in usedfilters:
 
                 print('\nCould not determine ZP (no sequence star mags in filter?) : instrumental mag only!!!')
 
-            
+
         ########### Template subtraction
 
             if sub == True and has_template == False:
                 print('\nNo template associated to image, skipping subtraction')
 
             elif sub == True and has_template == True:
-      
+
                 print('\nAligning template image and building template PSF')
 
                 if noalign == True:
                     im2 = fits.open(template)
-                    
+
                 else:
                     tmp = fits.open(template)
 
@@ -1713,7 +1694,7 @@ for f in usedfilters:
                         data2 = tmp[0].data
                         header2 = tmp[0].header
                         checkdat2 = len(data2)
-                        
+
                         tmp = tmp[0]
 
                     except:
@@ -1721,14 +1702,14 @@ for f in usedfilters:
 
                         data2 = tmp[1].data
                         header2 = tmp[1].header
-                        
+
                         tmp = tmp[1]
 
 
-                    
-                    
+
+
                     # New method: reproject first, then try astroalign
-                    
+
                     ### Using Reproject
 
                     tmp_resampled, footprint = reproject_interp(tmp, header)
@@ -1736,10 +1717,10 @@ for f in usedfilters:
                     tmp_resampled[np.isnan(tmp_resampled)] = np.nanmedian(tmp_resampled)
 
 #                        hdu2 = fits.PrimaryHDU(tmp_resampled)
-                    
+
                     try:
                         print('Tweaking registered image with Astroalign')
-                        
+
                         im_fixed = np.array(data, dtype="<f4")
                         tmp_fixed = np.array(tmp_resampled, dtype="<f4")
 
@@ -1750,7 +1731,7 @@ for f in usedfilters:
                         tmp_masked[np.isnan(tmp_masked)] = np.nanmedian(tmp_fixed)
 
                         hdu2 = fits.PrimaryHDU(tmp_masked)
-                    
+
                     except:
                         hdu2 = fits.PrimaryHDU(tmp_resampled)
 
@@ -1773,7 +1754,7 @@ for f in usedfilters:
 
                     data2 = im2[1].data
                     header2 = im2[1].header
-                    
+
                 try:
                     gain2 = header2['GAIN']
                 except:
@@ -1782,7 +1763,7 @@ for f in usedfilters:
                 bkg2 = Background2D(data2, box_size=bkgbox)
 
                 data2 = data2.astype(float) - bkg2.background
-                
+
                 bkg_error2 = bkg2.background_rms
 
                 try:
@@ -1794,7 +1775,7 @@ for f in usedfilters:
                     bkg_error2 = np.array([i.astype(float) for i in bkg_error2_adu])
                     err_array2 = calc_total_error(data2, bkg_error2, gain2)
 
-                
+
                 fig2 = plt.figure(2,(14,7))
                 plt.clf()
                 plt.ion()
@@ -1839,10 +1820,7 @@ for f in usedfilters:
                 psfinput2['x'] = co2[:,0]
                 psfinput2['y'] = co2[:,1]
 
-
-
                 nddata2 = astropy.nddata.NDData(data=data2)
-
 
                 photaps2 = CircularAperture(co2, r=aprad)
 
@@ -1863,9 +1841,9 @@ for f in usedfilters:
                     minpsf = -1
                     x_peak = 0
                     y_peak = 0
-                    
+
                     psf_iter = 0
-                    
+
                     while (sumpsf < 0) or (minpsf < -0.01) or ((x_peak/len(psf2) < 0.4) or (x_peak/len(psf2) > 0.6)) or ((y_peak/len(psf2) < 0.4) or (y_peak/len(psf2) > 0.6)) and psf_iter < 5:
 
                         if psf_iter > 5:
@@ -1898,8 +1876,8 @@ for f in usedfilters:
 
 
                         ax1t.errorbar(psfstars2.center_flat[:,0],psfstars2.center_flat[:,1],fmt='*',mfc='none', markeredgecolor='lime',markeredgewidth=2, markersize=20,label='Used in PSF fit')
-                        
-                        
+
+
                         # build PSF
                         try:
                             epsf_builder = EPSFBuilder(maxiters=10,recentering_maxiters=5,
@@ -1907,13 +1885,13 @@ for f in usedfilters:
                             epsf2, fitted_stars2 = epsf_builder(psfstars2)
 
                             psf2 = epsf2.data
-                            
+
                             x_peak = np.where(psf2==psf2.max())[1][0]
                             y_peak = np.where(psf2==psf2.max())[0][0]
-                            
+
                             minpsf = np.min(psf2)
                             sumpsf = np.sum(psf2)
-                            
+
 
                             ax2t = plt.subplot2grid((2,5),(0,3))
 
@@ -1928,7 +1906,7 @@ for f in usedfilters:
 
                             plt.draw()
 
-                            
+
 
                             ax3t = plt.subplot2grid((2,5),(0,4),projection='3d')
 
@@ -1945,15 +1923,13 @@ for f in usedfilters:
                             plt.draw()
 
                             plt.tight_layout(pad=0.5)
-                            
+
                             empirical = True
 
-         
+
                         except:
                             print('PSF fit failed (usually a weird EPSF_builder error):\nTrying different stamp size usually fixes!')
                             empirical = False
-
-
 
                     if not quiet:
                         if empirical == True:
@@ -1970,28 +1946,28 @@ for f in usedfilters:
                             psfthresh1 = input('Try new inclusion threshold: [' +str(psfthresh2)+' sigma]')
                             if not psfthresh1: psfthresh1 = psfthresh2
                             psfthresh2 = int(psfthresh1)
-                            
+
                             samp1 = input('Try new PSF oversampling: [' +str(samp2)+']')
                             if not samp1: samp1 = samp2
                             samp2 = int(samp1)
                     else:
                         happy = 'y'
-                        
-                
+
+
                 if empirical == False:
                     print('\nNo PSF determined, using basic Gaussian model')
-                    
+
                     if not quiet:
                         fwhm_gauss2 = input('Please specify width (FWHM) in pixels ['+str(fwhm_gauss_0)+'] ')
                         if not fwhm_gauss2: fwhm_gauss2 = fwhm_gauss_0
                     else:
                         fwhm_gauss2 = fwhm_gauss_0
                     fwhm_gauss2 = float(fwhm_gauss2)
-                    
+
                     epsf2 = CircularGaussianPRF(fwhm=fwhm_gauss2)
-                    
+
                     psf2 = np.zeros((2*stamprad2+1,2*stamprad2+1))
-                    
+
                     for xt in np.arange(2*stamprad2+1):
                         for yt in np.arange(2*stamprad2+1):
                             psf2[xt,yt] = epsf2.evaluate(xt,yt,x_0=stamprad2,y_0=stamprad2,fwhm=fwhm_gauss2,flux=1)
@@ -1999,14 +1975,14 @@ for f in usedfilters:
                 tmppsf = fits.PrimaryHDU(psf2)
                 tmppsf.writeto('tmpl_psf.fits',overwrite=True)
 
-                
+
                 plt.close(fig2)
-                
-                            
+
+
                 # Make cutouts for subtraction
 
                 cutout_loop = 'y'
-                
+
                 sci_sat_new = sci_sat
                 tmpl_sat_new = tmpl_sat
 
@@ -2023,14 +1999,14 @@ for f in usedfilters:
                     cutoutsize_x_new = 1600
                 if f == 'u' and cutoutsize_y < 1600:
                     cutoutsize_y_new = 1600
-                    
+
                 # Replace this with some logic to test if SN within x,y pixels of nearest edge!
                 if cutoutsize_x_new > min(SNco[0],data_orig.shape[1]-SNco[0]):
                     cutoutsize_x_new = min(SNco[0],data_orig.shape[1]-SNco[0])-1
                 if cutoutsize_y_new > min(SNco[1],data_orig.shape[0]-SNco[1]):
                     cutoutsize_y_new = min(SNco[1],data_orig.shape[0]-SNco[1])-1
 
-                
+
                 im2 = fits.open('tmpl_aligned.fits')
 
                 try:
@@ -2053,7 +2029,7 @@ for f in usedfilters:
                 while cutout_loop == 'y':
 
                     wcs = astropy.wcs.WCS(header_orig)
-                    
+
                     if cutoutsize_x_new > min(SNco[0],data_orig.shape[1]-SNco[0]):
                         cutoutsize_x_new = min(SNco[0],data_orig.shape[1]-SNco[0])-1
                     if cutoutsize_y_new > min(SNco[1],data_orig.shape[0]-SNco[1]):
@@ -2082,11 +2058,11 @@ for f in usedfilters:
                     try:
                         im_sub = run_subtraction('sci_trim.fits','tmpl_trim.fits','sci_psf.fits',
                         'tmpl_psf.fits',normalization='science',n_stamps=1,science_saturation=sci_sat_new, reference_saturation=tmpl_sat_new)
-                                            
+
                     except:
                         if not quiet:
                             print('Subtraction failed - can vary parameters or proceed without subtraction')
-                            
+
                             try_again = input('\nTry varying parameters? [y] ')
                             if not try_again: try_again = 'y'
 
@@ -2095,7 +2071,7 @@ for f in usedfilters:
                                 template = ''
                                 do_sub = False
                                 break
-            
+
                             cutoutsize1 = input('Try different cutout size? - enter x or x,y ['+str(cutoutsize_x_new)+','+str(cutoutsize_y_new)+'] ')
                             if not cutoutsize1:
                                 pass
@@ -2106,51 +2082,49 @@ for f in usedfilters:
                                 else:
                                     cutoutsize_y_new = cutoutsize_x_new
 
-            
+
                             tmpl_sat1 = input('Try different template saturation? ['+str(tmpl_sat_new)+'] ')
                             if not tmpl_sat1: tmpl_sat1 = tmpl_sat_new
                             tmpl_sat_new = int(tmpl_sat1)
-            
+
                             sci_sat1 = input('Try different science saturation? ['+str(sci_sat_new)+'] ')
                             if not sci_sat1: sci_sat1 = sci_sat_new
                             sci_sat_new = int(sci_sat1)
-                            
+
                             continue
                         else:
                             print('\nUsing unsubtracted data')
                             template = ''
                             comment1 += 'subtraction failed'
                             do_sub = False
-        
+
                             break
 
                     im_sub = np.real(im_sub[0])
-                    
+
                     im_sci.data = im_sub
                     im_sci.writeto('sub.fits', overwrite=True)
-                
+
                     data_sub = im_sub
-                    
+
                     try:
                         bkg_new = Background2D(data_sub,box_size=bkgbox)
                     except:
                         bkg_new = Background2D(data_sub,box_size=int(cutoutsize_x_new/4),exclude_percentile=0)
 
                     bkg_new_error = bkg_new.background_rms
-                    
+
                     data_sub -= bkg_new.background
 
                     plt.figure(1)
 
                     ax1.clear()
-                    
+
                     ax1.imshow(data_sub, origin='lower',cmap='gray',
                                 vmin=visualization.ZScaleInterval().get_limits(data_sub)[0],
                                 vmax=visualization.ZScaleInterval().get_limits(data_sub)[1])
-                                
+
                     ax1.errorbar(co[:,0]-(SNco[0]-cutoutsize_x_new/2.),co[:,1]-(SNco[1]-cutoutsize_y_new/2.), fmt='s',mfc='none',markeredgecolor='C0',markersize=8,markeredgewidth=1.5)
-
-
 
                     ax1.set_title('Template-subtracted cutout')
 
@@ -2160,22 +2134,22 @@ for f in usedfilters:
                     ax1.get_yaxis().set_visible(False)
                     ax1.get_xaxis().set_visible(False)
 
-                    
+
 
                     ax1.errorbar(cutoutsize_x_new/2.,cutoutsize_y_new/2.,fmt='o',markeredgecolor='r',mfc='none',
                                     markeredgewidth=3,markersize=20)
-                                    
-                    
+
+
                     plt.draw()
 
                     do_sub = True
-                    
+
                     if not quiet:
                         happy = input('\nProceed with this subtraction? [y] ')
                         if not happy: happy = 'y'
-                        
+
                         if happy not in ('y','yes'):
-                        
+
                             try_again = input('\nTry varying parameters? [y] ')
                             if not try_again: try_again = 'y'
 
@@ -2183,7 +2157,7 @@ for f in usedfilters:
                                 print('\nUsing unsubtracted data')
                                 template = ''
                                 do_sub = False
-            
+
                                 break
 
                             cutoutsize1 = input('Try different cutout size? - enter x or x,y ['+str(cutoutsize_x_new)+','+str(cutoutsize_y_new)+'] ')
@@ -2199,11 +2173,11 @@ for f in usedfilters:
                             tmpl_sat1 = input('Try different template saturation? ['+str(tmpl_sat_new)+']')
                             if not tmpl_sat1: tmpl_sat1 = tmpl_sat_new
                             tmpl_sat_new = int(tmpl_sat1)
-            
+
                             sci_sat1 = input('Try different science saturation? ['+str(sci_sat_new)+']')
                             if not sci_sat1: sci_sat1 = sci_sat_new
                             sci_sat_new = int(sci_sat1)
-                            
+
                             continue
                         else:
                             do_sub = True
@@ -2237,7 +2211,6 @@ for f in usedfilters:
 
                     ax1.errorbar(SNco[0],SNco[1],fmt='o',markeredgecolor='r',mfc='none',
                                     markeredgewidth=3,markersize=20)
-
 
 
         ########### SN photometry
@@ -2285,9 +2258,9 @@ for f in usedfilters:
                 if like_pos in ('n','no'):
                     print('Undo centroiding')
                     SNco = SNco_orig
-                    
+
                     ax4.clear()
-                    
+
                     ax4.imshow(data, origin='lower',cmap='gray', vmin=visualization.ZScaleInterval().get_limits(data[int(SNco[1])-(aprad+skyrad):int(SNco[1])+(aprad+skyrad), int(SNco[0])-(aprad+skyrad):int(SNco[0])+(aprad+skyrad)])[0],             vmax=visualization.ZScaleInterval().get_limits(data[int(SNco[1])-(aprad+skyrad):int(SNco[1])+(aprad+skyrad), int(SNco[0])-(aprad+skyrad):int(SNco[0])+(aprad+skyrad)])[1])
 
                     ax4.set_xlim(SNco[0]-(aprad+skyrad),SNco[0]+(aprad+skyrad))
@@ -2310,7 +2283,7 @@ for f in usedfilters:
                     ax4.add_patch(skycircle2)
 
                     plt.draw()
-                    
+
                     x_sh_new = input('Specify shift in x position? [0.0] ')
                     if not x_sh_new: x_sh_new = 0
                     x_sh_new = float(x_sh_new)
@@ -2321,9 +2294,9 @@ for f in usedfilters:
 
                     SNco[0] += x_sh_new
                     SNco[1] += y_sh_new
-                    
+
                     ax4.clear()
-                    
+
                     ax4.imshow(data, origin='lower',cmap='gray', vmin=visualization.ZScaleInterval().get_limits(data[int(SNco[1])-(aprad+skyrad):int(SNco[1])+(aprad+skyrad), int(SNco[0])-(aprad+skyrad):int(SNco[0])+(aprad+skyrad)])[0],             vmax=visualization.ZScaleInterval().get_limits(data[int(SNco[1])-(aprad+skyrad):int(SNco[1])+(aprad+skyrad), int(SNco[0])-(aprad+skyrad):int(SNco[0])+(aprad+skyrad)])[1])
 
                     ax4.set_xlim(SNco[0]-(aprad+skyrad),SNco[0]+(aprad+skyrad))
@@ -2346,8 +2319,6 @@ for f in usedfilters:
                     ax4.add_patch(skycircle2)
 
                     plt.draw()
-
-
 
             if forcepsf == True:
                 epsf.x_0.fixed = True
@@ -2391,7 +2362,7 @@ for f in usedfilters:
 
     #        epsf.x_0.fixed = True
     #        epsf.y_0.fixed = True
-    
+
             localbkg_estimator = LocalBackground(aprad, aprad+skyrad, MMMBackground())
             psfphot = PSFPhotometry(psf_model=epsf, fit_shape=fitrad,
                             finder=None, aperture_radius=min(stamprad,2*aprad_opt),
@@ -2431,8 +2402,8 @@ for f in usedfilters:
             plt.tight_layout(pad=0.5)
 
             plt.subplots_adjust(hspace=0.1,wspace=0.2)
-            
-            
+
+
             # Convert flux to instrumental magnitudes
 
             print('Converting flux to magnitudes...')
@@ -2472,13 +2443,13 @@ for f in usedfilters:
                 calMagAp = SNap + ZP_ap
 
                 errMagAp = np.sqrt(errSNap**2 + errZP_ap**2)
-                
-                
+
+
                 calMagAp_opt = SNap_opt + ZP_opt
 
                 errMagAp_opt = np.sqrt(errSNap_opt**2 + errZP_opt**2)
 
-                
+
                 calMagLim = ulim + ZP_opt
 
             else:
@@ -2490,13 +2461,13 @@ for f in usedfilters:
                 calMagAp = SNap
 
                 errMagAp = errSNap
-                
-                
+
+
                 calMagAp_opt = SNap_opt
 
                 errMagAp_opt = errSNap_opt
 
-                
+
                 calMagLim = ulim
 
                 comment1 += ' instrumental mag only'
@@ -2506,25 +2477,25 @@ for f in usedfilters:
             print('> Aperture mag (optimised aperture) = %.3f +/- %.3f' %(calMagAp_opt,errMagAp_opt))
             print('> Aperture mag (big aperture) = %.3f +/- %.3f' %(calMagAp,errMagAp))
             print('> Limiting mag (3 sigma, optimum ap) = %.3f' %(calMagLim))
-            
-            
+
+
             ## Output aperture flux:
-            
+
             flux_ZP = 10**(-0.4*ZP_ap) * 3631 * 1e6 # uJy
-            
+
             flux_ZP_err = np.log(10)/2.5 * errZP_ap * flux_ZP
-            
+
             flux = flux_ZP * SNphotTab['aperture_sum_sub']
-            
+
             flux_err = flux * np.sqrt((flux_ZP_err/flux_ZP)**2 + (SNphotTab['aperture_sum_err_1']/SNphotTab['aperture_sum_sub'])**2)
 
 
             flux_ZP_opt = 10**(-0.4*ZP_opt) * 3631 * 1e6 # uJy
-            
+
             flux_ZP_err_opt = np.log(10)/2.5 * errZP_opt * flux_ZP_opt
-            
+
             flux_opt = flux_ZP_opt * SNphotTab['aperture_opt_sum_sub']
-            
+
             flux_err_opt = flux_opt * np.sqrt((flux_ZP_err_opt/flux_ZP_opt)**2 + (SNphotTab['aperture_sum_err_0']/SNphotTab['aperture_opt_sum_sub'])**2)
 
 
@@ -2536,7 +2507,7 @@ for f in usedfilters:
                 comment += (' // '+comment1)
 
             outFile.write('\n'+image+'\t%s\t%s\t%.5f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%s\t%s' %(target_name,f,mjd,calMagPsf,errMagPsf,calMagAp_opt,errMagAp_opt,calMagAp,errMagAp,calMagLim,ZP_psf,errZP_psf,flux_opt,flux_err_opt,flux,flux_err,aprad_opt,template,comment))
-            
+
             fig_filename = os.path.join(outdir, image+'_'+start_time+'.pdf')
 
             if savefigs:
@@ -2554,8 +2525,6 @@ for f in usedfilters:
                 next = input('\n> Press enter to continue to next image')
 
 outFile.close()
-
-
 
 print('\n##########################################\nFinished!\nResults saved to \n'+results_filename+ '\n##########################################')
 
