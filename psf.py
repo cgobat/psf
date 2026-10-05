@@ -76,7 +76,7 @@ from skimage.transform import warp
 from scipy.ndimage import interpolation as interp
 import time
 from astroquery.sdss import SDSS
-from astroquery.ipac.irsa import Irsa
+from astroquery.vizier import Vizier
 from astropy import coordinates as coords
 import astropy.units as u
 from astropy.io import fits
@@ -306,57 +306,84 @@ ims.sort()
 
 ##### FUNCTIONS TO QUERY PANSTARRS #######
 
+PS1_CATALOG = 'II/389/ps1_dr2'
+SDSS_CATALOG = 'V/154/sdss16'
+TWOMASS_CATALOG = 'II/246/out'
+
+
+def _query_vizier(catalog, ra, dec, queryrad, columns):
+    position = coords.SkyCoord(ra=ra*u.deg, dec=dec*u.deg, frame='icrs')
+    result = Vizier(catalog=catalog, columns=columns, row_limit=-1).query_region(
+        position, radius=queryrad*u.arcmin)
+
+    if len(result) == 0 or len(result[0]) == 0:
+        raise RuntimeError('VizieR query for '+catalog+' returned no sources')
+
+    return result[0]
+
+
+def _deduplicate_sources(data, ra_col, dec_col, tolerance=2.5*u.arcsec):
+    if len(data) < 2:
+        return data
+
+    catalog = coords.SkyCoord(
+        ra=np.asarray(data[ra_col], dtype=float)*u.deg,
+        dec=np.asarray(data[dec_col], dtype=float)*u.deg,
+    )
+    keep = np.ones(len(data), dtype=bool)
+
+    for i in range(len(data)):
+        if not keep[i]:
+            continue
+        duplicate = catalog[i].separation(catalog) < tolerance
+        duplicate[:i+1] = False
+        keep[duplicate] = False
+
+    return data[keep]
+
+
 def PS1catalog(ra,dec,magmin=25,magmax=8,queryrad=5):
 
-    queryurl = 'https://catalogs.mast.stsci.edu/api/v0.1/panstarrs/dr2/stack.json?'
-    queryurl += 'ra='+str(ra)
-    queryurl += '&dec='+str(dec)
-    queryurl += '&radius='+str(queryrad/60.)
-    queryurl += '&columns=[raStack,decStack,gPSFMag,rPSFMag,iPSFMag,zPSFMag,yPSFMag,iKronMag]'
-    queryurl += '&nDetections.gte=6&pagesize=10000'
+    print('\nQuerying PS1 for reference stars via VizieR...\n')
 
-    print('\nQuerying PS1 for reference stars via MAST...\n')
+    data = _query_vizier(
+        PS1_CATALOG,
+        ra,
+        dec,
+        queryrad,
+        ['RAJ2000', 'DEJ2000', 'gmag', 'rmag', 'imag', 'zmag',
+         'ymag', 'iKmag', 'Nd'],
+    )
 
-    query = requests.get(queryurl)
+    # Match the previous MAST selection: at least six detections and
+    # point-like morphology from the i-band PSF/Kron magnitude difference.
+    stars = np.ma.filled(
+        (data['Nd'] >= 6) & ((data['imag'] - data['iKmag']) < 0.1),
+        False,
+    )
+    data = _deduplicate_sources(data[stars], 'RAJ2000', 'DEJ2000')
 
-    results = query.json()
+    if len(data) == 0:
+        raise RuntimeError('No suitable PS1 reference stars found')
 
-    if len(results['data']) > 1:
-    
-        data = np.array(results['data'])
+    output = np.column_stack([
+        np.ma.filled(data['RAJ2000'], np.nan),
+        np.ma.filled(data['DEJ2000'], np.nan),
+        np.ma.filled(data['gmag'], np.nan),
+        np.ma.filled(data['rmag'], np.nan),
+        np.ma.filled(data['imag'], np.nan),
+        np.ma.filled(data['zmag'], np.nan),
+        np.ma.filled(data['ymag'], np.nan),
+    ])
+    np.savetxt(
+        'PS1_seq.txt',
+        output,
+        fmt='%.8f\t%.8f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f',
+        header='ra\tdec\tg\tr\ti\tz\ty',
+        comments='',
+    )
 
-        # Star-galaxy separation: star if PSFmag - KronMag < 0.1
-        data = data[:,:-1][data[:,4]-data[:,-1]<0.1]
-        
-
-        # Below is a bit of a hack to remove duplicates
-        catalog = coords.SkyCoord(ra=data[:,0]*u.degree, dec=data[:,1]*u.degree)
-        
-        data2 = []
-        
-        indices = np.arange(len(data))
-        
-        used = []
-        
-        for i in data:
-            source = coords.SkyCoord(ra=i[0]*u.degree, dec=i[1]*u.deg)
-            d2d = source.separation(catalog)
-            catalogmsk = d2d < 2.5*u.arcsec
-            indexmatch = indices[catalogmsk]
-            for j in indexmatch:
-                if j not in used:
-                    data2.append(data[j])
-                    for k in indexmatch:
-                        used.append(k)
-
-
-        np.savetxt('PS1_seq.txt',data2,fmt='%.8f\t%.8f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f', header='ra\tdec\tg\tr\ti\tz\ty',comments='')
-
-        print('Success! Sequence star file created: PS1_seq.txt')
-
-    else:
-        sys.exit('Field not in PS1! Exiting')
-
+    print('Success! Sequence star file created: PS1_seq.txt')
 
 
 def PS1cutouts(ra,dec,filt,size=1):
@@ -438,79 +465,71 @@ def SDSScutouts(ra,dec,filt):
         
         
 def SDSScatalog(ra,dec,magmin=25,magmax=8,queryrad=5):
- 
-    print('\nQuerying SDSS for reference stars via Astroquery...\n')
 
-    pos = coords.SkyCoord(str(ra)+' '+str(dec), unit='deg', frame='icrs')
-    
-    data = SDSS.query_region(pos,radius=str(queryrad/60.)+'d',photoobj_fields=('ra','dec','u','g','r','i','z','type'))
-    
-    data = data[data['type'] == 6]
+    print('\nQuerying SDSS for reference stars via VizieR...\n')
 
-    
-    # NEED TO REMOVE DUPLICATES
+    data = _query_vizier(
+        SDSS_CATALOG,
+        ra,
+        dec,
+        queryrad,
+        ['RA_ICRS', 'DE_ICRS', 'umag', 'gmag', 'rmag', 'imag', 'zmag',
+         'class'],
+    )
 
-    catalog = coords.SkyCoord(ra=data['ra']*u.degree, dec=data['dec']*u.degree)
-    
-    data2 = data[:0].copy()
-    
-    indices = np.arange(len(data))
-    
-    used = []
-    
-    for i in data:
-        source = coords.SkyCoord(ra=i['ra']*u.degree, dec=i['dec']*u.deg)
-        d2d = source.separation(catalog)
-        catalogmsk = d2d < 2.5*u.arcsec
-        indexmatch = indices[catalogmsk]
-        for j in indexmatch:
-            if j not in used:
-                data2.add_row(data[j])
-                for k in indexmatch:
-                    used.append(k)
+    stars = np.ma.filled(data['class'] == 6, False)
+    data = _deduplicate_sources(data[stars], 'RA_ICRS', 'DE_ICRS')
 
-    data2.write('SDSS_seq.txt',format='ascii',overwrite=True, exclude_names=['type'],delimiter='\t')
-    
+    if len(data) == 0:
+        raise RuntimeError('No suitable SDSS reference stars found')
+
+    output = np.column_stack([
+        np.ma.filled(data['RA_ICRS'], np.nan),
+        np.ma.filled(data['DE_ICRS'], np.nan),
+        np.ma.filled(data['umag'], np.nan),
+        np.ma.filled(data['gmag'], np.nan),
+        np.ma.filled(data['rmag'], np.nan),
+        np.ma.filled(data['imag'], np.nan),
+        np.ma.filled(data['zmag'], np.nan),
+    ])
+    np.savetxt(
+        'SDSS_seq.txt',
+        output,
+        fmt='%.8f\t%.8f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f',
+        header='ra\tdec\tu\tg\tr\ti\tz',
+        comments='',
+    )
+
     print('Success! Sequence star file created: SDSS_seq.txt')
 
 
 def TWOMASScatalog(ra,dec,magmin=25,magmax=8,queryrad=5):
- 
-    print('\nQuerying 2MASS for reference stars via Astroquery...\n')
 
-    pos = coords.SkyCoord(str(ra)+' '+str(dec), unit='deg', frame='icrs')
-        
-    data = Irsa.query_region(pos,radius=str(queryrad/60.)+'d',catalog='fp_psc')
+    print('\nQuerying 2MASS for reference stars via VizieR...\n')
 
-    
-#    # NEED TO REMOVE DUPLICATES
-#
-#    catalog = coords.SkyCoord(ra=data['ra']*u.degree, dec=data['dec']*u.degree)
-#
-#    data2 = data[:0].copy()
-#
-#    indices = np.arange(len(data))
-#
-#    used = []
-#
-#    for i in data:
-#        source = coords.SkyCoord(ra=i['ra']*u.degree, dec=i['dec']*u.deg)
-#        d2d = source.separation(catalog)
-#        catalogmsk = d2d < 2.5*u.arcsec
-#        indexmatch = indices[catalogmsk]
-#        for j in indexmatch:
-#            if j not in used:
-#                data2.add_row(data[j])
-#                for k in indexmatch:
-#                    used.append(k)
+    data = _query_vizier(
+        TWOMASS_CATALOG,
+        ra,
+        dec,
+        queryrad,
+        ['RAJ2000', 'DEJ2000', 'Jmag', 'Hmag', 'Kmag'],
+    )
 
+    output = np.column_stack([
+        np.ma.filled(data['RAJ2000'], np.nan),
+        np.ma.filled(data['DEJ2000'], np.nan),
+        np.ma.filled(data['Jmag'], np.nan),
+        np.ma.filled(data['Hmag'], np.nan),
+        np.ma.filled(data['Kmag'], np.nan),
+    ])
+    np.savetxt(
+        '2MASS_seq.txt',
+        output,
+        fmt='%.8f\t%.8f\t%.3f\t%.3f\t%.3f',
+        header='ra\tdec\tJ\tH\tK',
+        comments='',
+    )
 
-    data.rename_column('j_m', 'J')
-    data.rename_column('h_m', 'H')
-    data.rename_column('k_m', 'K')
-    
-    data['ra','dec','J','H','K'].write('2MASS_seq.txt',format='ascii',overwrite=True, delimiter='\t')
-    
     print('Success! Sequence star file created: 2MASS_seq.txt')
 
 
